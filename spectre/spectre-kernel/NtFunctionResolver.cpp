@@ -163,39 +163,8 @@ NtFunctionResolver::FindSyscallZwFunction (
     _In_ CONST LONG SyscallNumber
     )
 {
-    PVOID zwFunction;
-    PVOID currentExecutableSection;
-    SIZE_T currentExecutableSectionSize;
-    BYTE zwFunctionBytes[] = {
-        0x50,                           // push rax
-        0xB8, 0x00, 0x00, 0x00, 0x00,   // mov eax, [system call number]
-        0xE9                            // jmp KiServiceInternal
-    };
-    CHAR* zwFunctionMask[sizeof(zwFunctionBytes) + 1];
-
-    zwFunction = NULL;
-    currentExecutableSection = NULL;
-    currentExecutableSectionSize = 0;
-
-    //
-    // Update the bytes to use the system call number we're after.
-    //
-    *RCAST<ULONG*>(zwFunctionBytes + 2) = SyscallNumber;
-    memset(zwFunctionMask, 'x', sizeof(zwFunctionBytes));
-    zwFunctionMask[sizeof(zwFunctionBytes)] = '\0';
-
-    //
-    // Enumerate each executable section of the ntoskrnl driver to look for the ZwXx function.
-    //
-    while (NT_SUCCESS(Utilities::FindNextExecSection(this->NtoskrnlModule.ImageBase, &currentExecutableSection, &currentExecutableSectionSize)) && zwFunction == NULL)
-    {
-        zwFunction = Utilities::FindPattern(currentExecutableSection, currentExecutableSectionSize, RCAST<CONST CHAR*>(zwFunctionBytes), RCAST<CONST CHAR*>(zwFunctionMask));
-    }
-
-    //
-    // On Windows 10 and 7, the offset of the signature is 0x13.
-    //
-    zwFunction = RCAST<PVOID>(RCAST<ULONG64>(zwFunction) - 0x13);
-
-    return zwFunction;
+    PVOID ssdt = Utilities::FindExportByName(this->NtoskrnlModule.ImageBase, "KeServiceDescriptorTable", FALSE);
+    PVOID servTable = *RCAST<PVOID*>(ssdt);
+    return (PVOID)((ULONG_PTR)servTable + (*RCAST<ULONG*>((CHAR*)servTable + SyscallNumber * sizeof(ULONG)) >> 4));
+    //x86: return (PVOID)(*RCAST<ULONG*>((CHAR*)servTable + SyscallNumber * sizeof(ULONG)));
 }
